@@ -1,19 +1,20 @@
-import numpy as np
-import serial
-from matplotlib import pyplot as plt  # I think this caused Gtk warning when ran on RPi via ssh
+#!/usr/bin/env python3
 
 
 #use to transfer file to RPi
 # $ sftp johndanger@raspberrypi.local
-# $ put /Users/jdanger/Desktop/Mobile_Robotics/LIDAR_Processing.py /home/johndanger/catkin_ws/src/hmwk1/scripts/LiDAR_Processing.py
+# $ put /Users/jdanger/Desktop/Mobile_Robotics/objs_LiDAR.py /home/johndanger/catkin_ws/src/hmwk1/scripts/objs_LiDAR.py
+# $ put C:/Users/claassen/Desktop/Mobile_Robotics/objs_LiDAR.py /home/johndanger/catkin_ws/src/hmwk1/scripts/objs_LiDAR.py
 
 
+import serial
 
-# try UTM for running ubuntu on osx
-
-##
 class D300_LiDAR:
-
+    port_by_connection_type = {
+        'Mac' : '/dev/tty.usbserial-0001',
+        'RPi' : '/dev/ttyUSB0',
+        'Windows' : 'COM4',
+    }
     #LD19/D300? Instructions:
     #   Uses DTOF (digital time of flight?)
     #   Can measure 4,500 times per second
@@ -34,14 +35,17 @@ class D300_LiDAR:
 
     # So each packet is 1+1+2+2+36+2+2+1 = 47 bytes long
 
-    def __init__(self, port, connection_type=''):
-        self.port = port
+    def __init__(self, connection_type='', port=None):
+
+        try:
+            self.port = self.port_by_connection_type[connection_type]
+        except KeyError:
+            assert port is not None, 'Either pass connection type or custom port name'
+            self.port = port
+
         self.conn_type = connection_type
         self.timeout_counter = 0
         self.scan_counter = 0
-        # self.packet_info_by_scan = {}
-        # self.packet_data_by_scan = {}
-
         self.buffer = b''
 
     def __enter__(self):
@@ -71,6 +75,7 @@ class D300_LiDAR:
         return bytes_list[loc+1] + (bytes_list[loc] << 8)
 
     def read_bytes(self, num_bytes=1, store=True):
+
         if not hasattr(self, 'conn'):
             raise RuntimeError('Serial connection not configured correctly')
 
@@ -91,12 +96,13 @@ class D300_LiDAR:
 
 
     def read_packet(self, num_bytes_in_packet=47):
+
         #read full data packet
         #read() outputs byte string, this prints to std_out as a mix of ascii char ("1./&kls3" ect) and hex ("\x4f")
         #this makes it look like very weird hex values by it is really many char that are each selected individually
         #either a single ascii chr can be selected ("3" or "@") or a single hex, and selecting each returns a single int
         #so list gets all 47 int values from the byte string
-        byteString = lidarConn.read_until(b'\x54') #header will be at end
+        byteString = self.conn.read_until(b'\x54') #header will be at end
         packet = list(byteString)
         if len(packet) != num_bytes_in_packet or packet[0] != 0x2C:  #packet info starts list
             self.timeout_counter += 1
@@ -106,6 +112,7 @@ class D300_LiDAR:
 
 
     def dep_skip_to_packet_start(self):
+
         #find start of a data packet
         self.read_bytes()
         while self.buffer != b'\x54':
@@ -127,7 +134,6 @@ class D300_LiDAR:
         metaData = packetValues.pop(0)
         numMeasurements = metaData & 0b11111
         assert metaData >> 5 == 1 and numMeasurements == 12, 'wrong meta data'
-
 
         #2 byte values are made up of Least/Most Significant Byte (LSB/MSB) which represent a single 16-bit number
         #MSB needs to be added to front of LSB (by shifting 8 bits left) and adding the two (could also add MSB*256)
@@ -158,76 +164,3 @@ class D300_LiDAR:
         #     for (i (16) = 0; i < len; i++)
         #         crc = CrcTable[(crc ^ *p++) & 0xff]
         # return crc (8)
-
-
-##
-
-
-
-# if __name__ == '__main__':
-if True:
-
-    #initialize obj and read n packets
-
-    lidarObj = D300_LiDAR('/dev/tty.usbserial-0001')  #mac port
-    # lidarObj = D300_LiDAR('/dev/ttyUSB0')  #RPi port
-    with lidarObj as lidarConn:
-
-        packetDataByScan = {}
-        packetInfoByScan = {}
-        while lidarObj.scan_counter < 1000 and lidarObj.timeout_counter < 10000:
-
-            lidarObj.read_packet()
-            if not lidarObj.buffer:
-                continue
-
-            info, data = lidarObj.process_packet()
-            packetInfoByScan[lidarObj.scan_counter] = info
-            packetDataByScan[lidarObj.scan_counter] = data
-
-            lidarObj.scan_counter += 1
-
-    print(packetInfoByScan)
-
-
-
-
-#points will be plotted in cartesian space
-allX, allY = [], []
-for scanNum, scanInfo in packetInfoByScan.items():
-
-    if scanNum == 0:  #first scan cannot have angle traveled calculated for it
-        continue
-
-    #unpack scan info
-    speed, startAngle, endAngle, timestamp, crc = scanInfo
-
-    #compare the angle travelled as calculated by the rotational speed and the measured angles
-    elapsedTime = timestamp - packetInfoByScan[scanNum-1][3]  #timestamp of previous scan
-    # totalAngle_speed = elapsedTime * speed
-    totalAngle_angle = endAngle - startAngle
-    # print(f'Angle diff: {round(totalAngle_speed - totalAngle_angle, 2)} degrees')
-
-    #calculate angle travelled using total angle from two different methods
-    # angleBetweenPoints_speed = totalAngle_speed / (len(packetDataByScan[scanNum]) - 1)
-    angleBetweenPoints_angle = totalAngle_angle / (len(packetDataByScan[scanNum]) - 1)
-    for pointNum, (distance, intensity) in enumerate(packetDataByScan[scanNum]):
-        pointAngle = startAngle + angleBetweenPoints_angle*pointNum  #has shifted section around 0 degrees
-        # pointAngle = startAngle + angleBetweenPoints_speed*pointNum  #similar to above but doesn't have shifted section
-        #convert angle and distance into cartesian coordinates
-        allX.append(distance * np.cos(np.deg2rad(pointAngle)))
-        allY.append(distance * np.sin(np.deg2rad(pointAngle)))
-
-
-plt.scatter(allX, allY, s=.1)
-plt.show()
-
-
-##
-
-
-
-
-
-
-

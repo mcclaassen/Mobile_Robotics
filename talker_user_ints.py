@@ -14,7 +14,6 @@ def talker():
     pub = rospy.Publisher('user_ints', String, queue_size=10)
     #name Node "talker", anonymous adds numbers to name to make it unique
     rospy.init_node('talker', anonymous=True)
-
     #runs process 10x/second (if process is short enough for this to be possible)
     rate = rospy.Rate(10)  #hz
 
@@ -27,6 +26,7 @@ def talker():
 
 
 if __name__ == '__main__':
+
     try:  #running publisher but stop for ctrl-C or other node shutdown
         talker()
     except rospy.ROSInterruptException:
