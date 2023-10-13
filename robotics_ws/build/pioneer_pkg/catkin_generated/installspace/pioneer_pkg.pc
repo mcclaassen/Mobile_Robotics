@@ -1,8 +1,0 @@
-prefix=/home/sruthi_jae/robotics_ws/install
-
-Name: pioneer_pkg
-Description: Description of pioneer_pkg
-Version: 0.0.0
-Cflags: 
-Libs: -L${prefix}/lib 
-Requires: 
