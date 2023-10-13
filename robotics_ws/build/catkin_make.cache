@@ -1,0 +1,2 @@
+pioneer_pkg
+-DCATKIN_DEVEL_PREFIX=/home/sruthi_jae/robotics_ws/devel -DCMAKE_INSTALL_PREFIX=/home/sruthi_jae/robotics_ws/install -G Unix Makefiles
