@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import rospy
-import rosbag
+# import rosbag
 from std_msgs.msg import String
 
 import math
@@ -21,7 +21,7 @@ def talker_LiDAR_Cartesian():
     #Node will publish to "LiDAR_readings" topic, with String message type
     pub = rospy.Publisher('LiDAR_readings', String, queue_size=10)
 
-    bag = rosbag.Bag('Minute_LiDAR_bag', 'w')
+    # bag = rosbag.Bag('Minute_LiDAR_bag', 'w')
 
     #name Node "LiDAR_talker", anonymous adds numbers to name to make it unique
     rospy.init_node('LiDAR_talker', anonymous=True)
@@ -59,7 +59,7 @@ def talker_LiDAR_Cartesian():
                 #publishes to "LiDAR_readings" topic
                 pub.publish(dataStr)
                 #stores in bag
-                bag.write(dataStr)
+                # bag.write(dataStr)
 
             rate.sleep()  #sleeps for remainder of 1/10th of a second to heep 10 hz process rate
 

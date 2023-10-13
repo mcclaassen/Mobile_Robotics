@@ -1,0 +1,2 @@
+$ rosrun [demonstration1 pkg name] talker_LiDAR.py
+$ rosbag record --duration=1m /LiDAR_readings
