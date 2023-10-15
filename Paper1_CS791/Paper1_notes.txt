@@ -1,0 +1,117 @@
+Uses extended Kalman filter (EKF)
+SDK stands for software develoment kit (onboard UAV, developed by DJI)
+
+Intro:
+
+Target in an unknown environment needs to be reached by UGV.
+UAV surveys env in lawnmower fashion and records the target coordinates with respect to a global reference frame.
+UAV then transmits the survey to the UGV and returns to the start.
+
+UGV also scans env to avoid obstacles while it is being guided on the optimal path by the UAV.
+The EKF updates the robots’ coordinates whenever the UGV observes a reference marker (not sure where it describes this)
+
+
+
+Related Work:
+	
+
+
+System Overview:
+
+	UAV:
+		Can measure velocity (stereo camera) and height relative to the ground (ultrasonics)
+		Also uses onboard IMU 
+
+	UGV:
+		2 DOF, can move omni-directionally due to Mecanum wheels (each driven separately)
+		
+
+EKF-Based State Estimation
+
+	Implementation of the EKF for robot pose estimation:
+		Centralized EKF schema to fuse sensor data (from both robots) and estimate pose of both robots
+		Also designed to be easily decomposed into 2 EKFs that run each robot separately (in case need to distribute processing load)
+		Even if split, still maintains data interdependencies as if it’s running on one machine (thru communication I assume)
+
+
+	Process occurs in three steps:
+	    prediction/propagation (estimate state & error covar.)
+	    observation (measure state & ???)
+	    update/correction (correct predictions using collected observations)
+
+
+	Prediction/Propagation
+
+		velocity measurement accuracy is 0.04 m/s (at 2 m altitude)
+		velocities are both gotten accurately from onboard flight controller on each vehicle
+		It is thus unnecessary to include sensor bias in the state vector x
+
+		Seems like “N1” controller is on UAV and “N3” controller is on UGV
+		
+		Compass modules provide each vehicles oreientation w/ a quaternion (North-East_Down reference frame)
+		This refrence frame is different from right-handed frame, x-axis points direction of vehicle heading
+
+        Global frame aligned to UGV to start by assigning the initial UGVs heading (wrt to global frame) as the new global frame x-axis
+        Rotation matrices R_g,UAV/UGV are calculated from the quaternions published in real time by UAV software (SDK)
+
+
+
+		Math Steps:
+            g script is for global reference frame, b is for body reference frame
+            P_UAV = position vector of UAV
+            v_UAV = velocity vector
+            x is state vector
+            u is control input
+            R_g,UAV = rotation matrix from UAV body RF to global RF
+
+            state vector definition (position):
+                x = [P_g,UAV  P_g,UGV] = [x,y,z for each vehicle in global RF]
+            process model definition (velocity):
+                x_dot = f(x, u, n) = [v_g,UAV  v_g,UGV] = [x_dot,y_dot,z_dot for each vehicle in global RF]
+                      = [R_g,UAV x v_b,UAV, R_g,UGV x v_b,UGV] (rotated body RF coordinates)
+                not sure what "n" is in f(...)
+
+            Estimated mean of state vector x (mu_bar_t) for current timestep:
+                mu_bar_t = mu_t-1 + delta_t  x  f(mu_t-1, u_t, 0) (n = noise?? idk, would have to be process noise)
+
+
+            SIGMA_bar_t is estimated covar. matrix
+            A_t & U_t (which are partials of f() (same f() as in mu_bar_t I assume) wrt x & n) (what is n??)
+            Q_t is the system noise matrix
+
+            SIGMA_bar_t and Q_t are both combined UAV/UGV matrices with the diagonals being:
+                [SIGMA_UAV, SIGMA_UGV] (type in paper here)
+                [Q_UAV, Q_UGV]
+            and 0s being everywhere else
+
+
+			Also calculates covariance matrix (SIGMA_bar_t) and
+			involves F_t & V_t which are functions of
+
+		
+	Observation:
+	    c super script denotes camera RF
+	    z = observation
+	    v = observational noise (gaussian)
+	    T_g,UGV = translation from origin to UGV in global RF
+	        T_xxx,vehicle  ->  "Translation from xxx RF origin to vehicle in xxx RF"
+	        T_g,UGV = T_g,UAV + R_g,UAV * (T_c,UAV + R_c,UAV*T_c,UGV)
+	        T_g,UAV = T_g,target - R_g,UAV * (T_c,UAV + R_c,UAV*T_c,target) (only first and last vars changes, and - -> +
+	        values are calculated, measured, or given by vehicle specs
+
+        Three steps to observation:
+            1)  downward facing camera on UAV detects UGV (by marker on UGV)
+                gives observation as:
+                    z_t = [[0  0  0], [T_g,UGV]] + v
+
+            2)  downward facing camera on UAV detects target location (by marker)
+                gives observation as:
+                    z_t = [[T_g,UAV], [0  0  0]] + v
+                The T_g,target (translation from origin to target in global RF) is measured in initial "lawnmower" survey
+                T_c,tar (translation from camera to target in camera RF) gotten through camera calibration
+            3)  downward facing camera sees both markers:
+                    z_t = [T_g,UAV  T_g,UGV] + v
+
+
+    Update:
+
