@@ -1,6 +1,6 @@
 #from:
 # https://thekalmanfilter.com/kalman-filter-explained-simply/
-
+# and www.intechopen.com/chapters/63164
 #Kalman filter uses observed values to estimate actual values of same variable AND the values of unmeasured variables
 #It can estimate unmeasured variables by looking at the covariance with the measured variable
     #For example, position observations used to estimate actual position AND velocity of object
